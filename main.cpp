@@ -7,15 +7,15 @@
 
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
-#define USE_MODEM_LORA  0
+#define USE_MODEM_LORA  1
 #define USE_MODEM_FSK   !USE_MODEM_LORA
 
-#define RF_FREQUENCY                                    869000000 // Hz
+#define RF_FREQUENCY                                    868000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
 
 #if USE_MODEM_LORA == 1
 
-    #define LORA_BANDWIDTH                              0         // [0: 125 kHz,
+    #define LORA_BANDWIDTH                              2         // [0: 125 kHz,
                                                                   //  1: 250 kHz,
                                                                   //  2: 500 kHz,
                                                                   //  3: Reserved]
@@ -32,7 +32,7 @@
 #elif USE_MODEM_FSK == 1
 
     #define FSK_FDEV                                    25e3      // Hz
-    #define FSK_DATARATE                                50e3      // bps
+    #define FSK_DATARATE                                9600      // bps
     #define FSK_BANDWIDTH                               50e3      // Hz
     #define FSK_AFC_BANDWIDTH                           83.333e3  // Hz
     #define FSK_PREAMBLE_LENGTH                         5         // Same for Tx and Rx
@@ -94,14 +94,12 @@ volatile States_t State = LOWPOWER;
 double RssiValue = 0.0;
 double SnrValue = 0.0;
 
-DigitalOut Led( LED1 );
-
 int main() 
 {
     uint8_t i;
     bool isMaster = true;
     
-    debug("\n\r\n\r     SX1276 Ping Pong Demo Application \n\r");
+    debug( "\n\r\n\r     SX1276 Ping Pong Demo Application \n\r" );
         
 #if defined TARGET_NUCLEO_L152RE
     debug( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n" );
@@ -113,7 +111,8 @@ int main()
     debug( DEBUG_MESSAGE, "         > Untested Platform <\r\n" );
 #endif
     
-
+    debug( DEBUG_MESSAGE, "SX1276 Chipset Version = 0x%x \n\r", Radio.Read( REG_VERSION ) );
+    
     Radio.SetChannel( RF_FREQUENCY ); 
 
 #if USE_MODEM_LORA == 1
@@ -147,6 +146,8 @@ int main()
 #error "Please define a modem in the compiler options."
 
 #endif
+     
+    debug( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" ); 
         
     Radio.Rx( RX_TIMEOUT_VALUE );
     
@@ -161,8 +162,6 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PongMsg, 4 ) == 0 )
                     {
-                        // Indicates on a LED that the received frame is a PONG
-                        Led = !Led;
                         debug( "Pong...\r\n" );
                         // Send the next PING frame            
                         Buffer[0] = 'P';
@@ -191,8 +190,6 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     {
-                        // Indicates on a LED that the received frame is a PING
-                        Led = !Led;
                         debug( "Ping...\r\n" );
                         // Send the reply to the PONG string
                         Buffer[0] = 'P';
@@ -212,9 +209,6 @@ int main()
             State = LOWPOWER;
             break;
         case TX:
-            // Indicates on a LED that we have sent a PING [Master]
-            // Indicates on a LED that we have sent a PONG [Slave]
-            Led = !Led;
             if ( isMaster )
             {
                 debug("...Ping\r\n" );
@@ -310,8 +304,8 @@ void OnRxTimeout( void )
 {
     debug( DEBUG_MESSAGE, ":OnRxTimeout\n\r" );
     Radio.Sleep( );
-    State = RX_TIMEOUT;
     Buffer[ BufferSize ] = 0;
+    State = RX_TIMEOUT;
 }
 
 void OnRxError( void )
