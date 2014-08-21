@@ -7,10 +7,10 @@
 
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
-#define USE_MODEM_LORA  1
+#define USE_MODEM_LORA  0
 #define USE_MODEM_FSK   !USE_MODEM_LORA
 
-#define RF_FREQUENCY                                    868000000 // Hz
+#define RF_FREQUENCY                                    875000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
 
 #if USE_MODEM_LORA == 1
@@ -31,10 +31,10 @@
 
 #elif USE_MODEM_FSK == 1
 
-    #define FSK_FDEV                                    25e3      // Hz
-    #define FSK_DATARATE                                9600      // bps
-    #define FSK_BANDWIDTH                               50e3      // Hz
-    #define FSK_AFC_BANDWIDTH                           83.333e3  // Hz
+    #define FSK_FDEV                                    25000     // Hz
+    #define FSK_DATARATE                                19200     // bps
+    #define FSK_BANDWIDTH                               50000     // Hz
+    #define FSK_AFC_BANDWIDTH                           83333     // Hz
     #define FSK_PREAMBLE_LENGTH                         5         // Same for Tx and Rx
     #define FSK_FIX_LENGTH_PAYLOAD_ON                   false
 
@@ -111,7 +111,16 @@ int main()
     debug( DEBUG_MESSAGE, "         > Untested Platform <\r\n" );
 #endif
     
-    debug( DEBUG_MESSAGE, "SX1276 Chipset Version = 0x%x \n\r", Radio.Read( REG_VERSION ) );
+    if( Radio.DetectBoardType( ) == SX1276MB1LAS )
+    {
+        debug( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1LAS < \n\r" );
+    }
+    else
+    {
+        debug( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1MAS < \n\r" );
+    }
+    
+    debug( DEBUG_MESSAGE, " > Chipset Version = 0x%x < \n\r", Radio.Read( REG_VERSION ) );
     
     Radio.SetChannel( RF_FREQUENCY ); 
 
@@ -162,7 +171,7 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PongMsg, 4 ) == 0 )
                     {
-                        debug( "Pong...\r\n" );
+                        debug( "...Pong\r\n" );
                         // Send the next PING frame            
                         Buffer[0] = 'P';
                         Buffer[1] = 'I';
@@ -176,12 +185,28 @@ int main()
                         wait_ms( 10 ); 
                         Radio.Send( Buffer, BufferSize );
                     }
-                    else if( strncmp( ( const char* )Buffer,
-                             ( const char* )PingMsg, 4 ) == 0 )
+                    else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     { // A master already exists then become a slave
+                        debug( "...Ping\r\n" );
                         isMaster = false;
-                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        // Send the next PING frame            
+                        Buffer[0] = 'P';
+                        Buffer[1] = 'O';
+                        Buffer[2] = 'N';
+                        Buffer[3] = 'G';
+                        // We fill the buffer with numbers for the payload 
+                        for( i = 4; i < BufferSize; i++ )
+                        {
+                            Buffer[i] = i - 4;
+                        }
+      //                  wait_ms( 10 ); 
+                        Radio.Send( Buffer, BufferSize );
                     }
+                    else // valid reception but neither a PING or a PONG message
+                    {    // Set device as master ans start again
+                        isMaster = true;
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                    }    
                 }
             }
             else
@@ -190,8 +215,8 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     {
-                        debug( "Ping...\r\n" );
-                        // Send the reply to the PONG string
+                        debug( "...Ping\r\n" );
+                        // Send the reply to the PING string
                         Buffer[0] = 'P';
                         Buffer[1] = 'O';
                         Buffer[2] = 'N';
@@ -204,20 +229,24 @@ int main()
                         wait_ms( 10 );  
                         Radio.Send( Buffer, BufferSize );
                     }
+                    else // valid reception but not a PING as expected
+                    {    // Set device as master and start again
+                        isMaster = true;
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                    }    
                 }
             }
             State = LOWPOWER;
             break;
-        case TX:
-            if ( isMaster )
+        case TX:     
+            if( isMaster == true )  
             {
-                debug("...Ping\r\n" );
+                debug( "Ping...\r\n" );
             }
             else
             {
-                debug("...Pong\r\n" );
+                debug( "Pong...\r\n" );
             }
-            
             Radio.Rx( RX_TIMEOUT_VALUE );
             State = LOWPOWER;
             break;
@@ -259,7 +288,17 @@ int main()
             }
             else
             {
-                Radio.Rx( RX_TIMEOUT_VALUE );
+                // Send the next PONG frame
+                Buffer[0] = 'P';
+                Buffer[1] = 'O';
+                Buffer[2] = 'N';
+                Buffer[3] = 'G';
+                for( i = 4; i < BufferSize; i++ )
+                {
+                    Buffer[i] = i - 4;
+                }
+                wait_ms( 10 );  
+                Radio.Send( Buffer, BufferSize );
             }
             State = LOWPOWER;
             break;
@@ -278,13 +317,13 @@ int main()
 
 void OnTxDone( void )
 {
-    debug( DEBUG_MESSAGE, ":OnTxDone\n\r" );
+    debug( DEBUG_MESSAGE, "> OnTxDone\n\r" );
     State = TX;
 }
 
 void OnRxDone( uint8_t *payload, uint16_t size, int8_t rssi, int8_t snr)
 {
-    debug( DEBUG_MESSAGE, ":OnRxDone\n\r" );
+    debug( DEBUG_MESSAGE, "> OnRxDone\n\r" );
     Radio.Sleep( );
     BufferSize = size;
     memcpy( Buffer, payload, BufferSize );
@@ -295,14 +334,14 @@ void OnRxDone( uint8_t *payload, uint16_t size, int8_t rssi, int8_t snr)
 
 void OnTxTimeout( void )
 {
-    debug( DEBUG_MESSAGE, ":OnTxTimeout\n\r" );
+    debug( DEBUG_MESSAGE, "> OnTxTimeout\n\r" );
     Radio.Sleep( );
     State = TX_TIMEOUT;
 }
 
 void OnRxTimeout( void )
 {
-    debug( DEBUG_MESSAGE, ":OnRxTimeout\n\r" );
+    debug( DEBUG_MESSAGE, "> OnRxTimeout\n\r" );
     Radio.Sleep( );
     Buffer[ BufferSize ] = 0;
     State = RX_TIMEOUT;
@@ -310,7 +349,7 @@ void OnRxTimeout( void )
 
 void OnRxError( void )
 {
-    debug( DEBUG_MESSAGE, ":OnRxError\n\r" );
+    debug( DEBUG_MESSAGE, "> OnRxError\n\r" );
     Radio.Sleep( );
     State = RX_ERROR;
 }
