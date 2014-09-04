@@ -7,10 +7,10 @@
 
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
-#define USE_MODEM_LORA  0
+#define USE_MODEM_LORA  1
 #define USE_MODEM_FSK   !USE_MODEM_LORA
 
-#define RF_FREQUENCY                                    875000000 // Hz
+#define RF_FREQUENCY                                    475000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
 
 #if USE_MODEM_LORA == 1
@@ -27,8 +27,11 @@
     #define LORA_PREAMBLE_LENGTH                        8         // Same for Tx and Rx
     #define LORA_SYMBOL_TIMEOUT                         5         // Symbols
     #define LORA_FIX_LENGTH_PAYLOAD_ON                  false
+    #define LORA_FHSS_ENABLED                           false  
+    #define LORA_NB_SYMB_HOP                            4     
     #define LORA_IQ_INVERSION_ON                        false
-
+    #define LORA_CRC_ENABLED                            true
+    
 #elif USE_MODEM_FSK == 1
 
     #define FSK_FDEV                                    25000     // Hz
@@ -37,13 +40,20 @@
     #define FSK_AFC_BANDWIDTH                           83333     // Hz
     #define FSK_PREAMBLE_LENGTH                         5         // Same for Tx and Rx
     #define FSK_FIX_LENGTH_PAYLOAD_ON                   false
-
+    #define FSK_CRC_ENABLED                             true
+    
 #else
     #error "Please define a modem in the compiler options."
 #endif
 
 #define RX_TIMEOUT_VALUE                                3000000   // in us
 #define BUFFER_SIZE                                     32        // Define the payload size here
+
+#if( defined ( TARGET_KL25Z ) )
+DigitalOut led(LED2);
+#else
+DigitalOut led(LED1);
+#endif
 
 /*
  * Callback functions prototypes
@@ -73,6 +83,11 @@ void OnRxTimeout( void );
  */
 void OnRxError( void );
 
+/*!
+ * @brief Function executed on Radio Fhss Change Channel event
+ */
+void OnFhssChangeChannel( uint8_t channelIndex );
+
 /*
  *  Global variables declarations
  */
@@ -81,7 +96,7 @@ typedef RadioState States_t;
 /*
  *  Global variables declarations
  */
-SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError );
+SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError, NULL );
 
 const uint8_t PingMsg[] = "PING";
 const uint8_t PongMsg[] = "PONG";
@@ -125,17 +140,26 @@ int main()
     Radio.SetChannel( RF_FREQUENCY ); 
 
 #if USE_MODEM_LORA == 1
-
-    debug("\n\r\n\r              > LORA Mode < \n\r\n\r");
+    
+    if( LORA_FHSS_ENABLED == true )
+    {
+        debug("\n\r\n\r              > LORA FHSS Mode < \n\r\n\r");
+    }
+    else
+    {
+        debug("\n\r\n\r              > LORA Mode < \n\r\n\r");
+    }
     Radio.SetTxConfig( MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                          LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                          LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                         true, LORA_IQ_INVERSION_ON, 3000000 );
+                         LORA_CRC_ENABLED, LORA_FHSS_ENABLED, LORA_NB_SYMB_HOP, 
+                         LORA_IQ_INVERSION_ON, 3000000 );
     
     Radio.SetRxConfig( MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
                          LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
                          LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
-                         true, LORA_IQ_INVERSION_ON, true );
+                         LORA_CRC_ENABLED, LORA_FHSS_ENABLED, LORA_NB_SYMB_HOP, 
+                         LORA_IQ_INVERSION_ON, true );
                          
 #elif USE_MODEM_FSK == 1
 
@@ -143,12 +167,12 @@ int main()
     Radio.SetTxConfig( MODEM_FSK, TX_OUTPUT_POWER, FSK_FDEV, 0,
                          FSK_DATARATE, 0,
                          FSK_PREAMBLE_LENGTH, FSK_FIX_LENGTH_PAYLOAD_ON,
-                         true, 0, 3000000 );
+                         FSK_CRC_ENABLED, 0, 0, 0, 3000000 );
     
     Radio.SetRxConfig( MODEM_FSK, FSK_BANDWIDTH, FSK_DATARATE,
                          0, FSK_AFC_BANDWIDTH, FSK_PREAMBLE_LENGTH,
-                         0, FSK_FIX_LENGTH_PAYLOAD_ON, true,
-                         false, true );
+                         0, FSK_FIX_LENGTH_PAYLOAD_ON, FSK_CRC_ENABLED,
+                         0, 0, false, true );
                          
 #else
 
@@ -157,6 +181,8 @@ int main()
 #endif
      
     debug( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" ); 
+        
+    led = 0;
         
     Radio.Rx( RX_TIMEOUT_VALUE );
     
@@ -171,6 +197,7 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PongMsg, 4 ) == 0 )
                     {
+                        led = !led;
                         debug( "...Pong\r\n" );
                         // Send the next PING frame            
                         Buffer[0] = 'P';
@@ -188,6 +215,7 @@ int main()
                     else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     { // A master already exists then become a slave
                         debug( "...Ping\r\n" );
+                        led = !led;
                         isMaster = false;
                         // Send the next PING frame            
                         Buffer[0] = 'P';
@@ -199,7 +227,7 @@ int main()
                         {
                             Buffer[i] = i - 4;
                         }
-      //                  wait_ms( 10 ); 
+                        wait_ms( 10 ); 
                         Radio.Send( Buffer, BufferSize );
                     }
                     else // valid reception but neither a PING or a PONG message
@@ -215,6 +243,7 @@ int main()
                 {
                     if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     {
+                        led = !led;
                         debug( "...Ping\r\n" );
                         // Send the reply to the PING string
                         Buffer[0] = 'P';
@@ -238,7 +267,8 @@ int main()
             }
             State = LOWPOWER;
             break;
-        case TX:     
+        case TX:    
+            led = !led; 
             if( isMaster == true )  
             {
                 debug( "Ping...\r\n" );
@@ -353,3 +383,4 @@ void OnRxError( void )
     Radio.Sleep( );
     State = RX_ERROR;
 }
+
