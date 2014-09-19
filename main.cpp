@@ -4,14 +4,14 @@
 #include "mbed_debug.h"
 
 /* Set this flag to '1' to display debug messages on the console */
-#define DEBUG_MESSAGE   1
+#define DEBUG_MESSAGE   0
 
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
-#define USE_MODEM_LORA  0
+#define USE_MODEM_LORA  1
 #define USE_MODEM_FSK   !USE_MODEM_LORA
 
-#define RF_FREQUENCY                                    915000000 // Hz
+#define RF_FREQUENCY                                    868000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
 
 #if USE_MODEM_LORA == 1
@@ -74,8 +74,8 @@ uint8_t Buffer[BUFFER_SIZE];
 
 volatile States_t State = LOWPOWER;
 
-double RssiValue = 0.0;
-double SnrValue = 0.0;
+int16_t RssiValue = 0.0;
+int8_t SnrValue = 0.0;
 
 int main() 
 {
@@ -85,7 +85,7 @@ int main()
     debug( "\n\r\n\r     SX1276 Ping Pong Demo Application \n\r" );
         
 #if defined TARGET_NUCLEO_L152RE
-    debug( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n", NULL );
+    debug_if( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n", NULL );
 #elif defined TARGET_KL25Z
     debug_if( DEBUG_MESSAGE, "         > KL25Z Platform <\r\n", NULL );
 #elif defined TARGET_LPC11U6X
@@ -316,6 +316,7 @@ int main()
 void OnTxDone( void )
 {
     debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r", NULL );
+    Radio.Sleep( );
     State = TX;
 }
 
