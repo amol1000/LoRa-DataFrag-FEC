@@ -1,16 +1,17 @@
 #include "mbed.h"
+#include "main.h"
 #include "sx1276-hal.h"
-#include "debug.h"
+#include "mbed_debug.h"
 
 /* Set this flag to '1' to display debug messages on the console */
-#define DEBUG_MESSAGE   0
+#define DEBUG_MESSAGE   1
 
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
-#define USE_MODEM_LORA  1
+#define USE_MODEM_LORA  0
 #define USE_MODEM_FSK   !USE_MODEM_LORA
 
-#define RF_FREQUENCY                                    475000000 // Hz
+#define RF_FREQUENCY                                    915000000 // Hz
 #define TX_OUTPUT_POWER                                 14        // 14 dBm
 
 #if USE_MODEM_LORA == 1
@@ -56,39 +57,6 @@ DigitalOut led(LED1);
 #endif
 
 /*
- * Callback functions prototypes
- */
-/*!
- * @brief Function to be executed on Radio Tx Done event
- */
-void OnTxDone( void );
-
-/*!
- * @brief Function to be executed on Radio Rx Done event
- */
-void OnRxDone( uint8_t *payload, uint16_t size, int8_t rssi, int8_t snr );
-
-/*!
- * @brief Function executed on Radio Tx Timeout event
- */
-void OnTxTimeout( void );
-
-/*!
- * @brief Function executed on Radio Rx Timeout event
- */
-void OnRxTimeout( void );
-
-/*!
- * @brief Function executed on Radio Rx Error event
- */
-void OnRxError( void );
-
-/*!
- * @brief Function executed on Radio Fhss Change Channel event
- */
-void OnFhssChangeChannel( uint8_t channelIndex );
-
-/*
  *  Global variables declarations
  */
 typedef RadioState States_t;
@@ -96,7 +64,7 @@ typedef RadioState States_t;
 /*
  *  Global variables declarations
  */
-SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError, NULL );
+SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError, NULL, NULL );
 
 const uint8_t PingMsg[] = "PING";
 const uint8_t PongMsg[] = "PONG";
@@ -117,25 +85,25 @@ int main()
     debug( "\n\r\n\r     SX1276 Ping Pong Demo Application \n\r" );
         
 #if defined TARGET_NUCLEO_L152RE
-    debug( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n" );
+    debug( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n", NULL );
 #elif defined TARGET_KL25Z
-    debug( DEBUG_MESSAGE, "         > KL25Z Platform <\r\n" );
+    debug_if( DEBUG_MESSAGE, "         > KL25Z Platform <\r\n", NULL );
 #elif defined TARGET_LPC11U6X
-    debug( DEBUG_MESSAGE, "         > LPC11U6X Platform <\r\n" );
+    debug_if( DEBUG_MESSAGE, "         > LPC11U6X Platform <\r\n", NULL );
 #else
-    debug( DEBUG_MESSAGE, "         > Untested Platform <\r\n" );
+    debug_if( DEBUG_MESSAGE, "         > Untested Platform <\r\n", NULL );
 #endif
     
     if( Radio.DetectBoardType( ) == SX1276MB1LAS )
     {
-        debug( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1LAS < \n\r" );
+        debug_if( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1LAS < \n\r", NULL );
     }
     else
     {
-        debug( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1MAS < \n\r" );
+        debug_if( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1MAS < \n\r", NULL );
     }
     
-    debug( DEBUG_MESSAGE, " > Chipset Version = 0x%x < \n\r", Radio.Read( REG_VERSION ) );
+    debug_if( DEBUG_MESSAGE, " > Chipset Version = 0x%x < \n\r", Radio.Read( REG_VERSION ) );
     
     Radio.SetChannel( RF_FREQUENCY ); 
 
@@ -180,7 +148,7 @@ int main()
 
 #endif
      
-    debug( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" ); 
+    debug_if( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n", NULL ); 
         
     led = 0;
         
@@ -347,13 +315,13 @@ int main()
 
 void OnTxDone( void )
 {
-    debug( DEBUG_MESSAGE, "> OnTxDone\n\r" );
+    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r", NULL );
     State = TX;
 }
 
-void OnRxDone( uint8_t *payload, uint16_t size, int8_t rssi, int8_t snr)
+void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-    debug( DEBUG_MESSAGE, "> OnRxDone\n\r" );
+    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r", NULL );
     Radio.Sleep( );
     BufferSize = size;
     memcpy( Buffer, payload, BufferSize );
@@ -364,14 +332,14 @@ void OnRxDone( uint8_t *payload, uint16_t size, int8_t rssi, int8_t snr)
 
 void OnTxTimeout( void )
 {
-    debug( DEBUG_MESSAGE, "> OnTxTimeout\n\r" );
+    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r", NULL );
     Radio.Sleep( );
     State = TX_TIMEOUT;
 }
 
 void OnRxTimeout( void )
 {
-    debug( DEBUG_MESSAGE, "> OnRxTimeout\n\r" );
+    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r", NULL );
     Radio.Sleep( );
     Buffer[ BufferSize ] = 0;
     State = RX_TIMEOUT;
@@ -379,7 +347,7 @@ void OnRxTimeout( void )
 
 void OnRxError( void )
 {
-    debug( DEBUG_MESSAGE, "> OnRxError\n\r" );
+    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r", NULL );
     Radio.Sleep( );
     State = RX_ERROR;
 }
