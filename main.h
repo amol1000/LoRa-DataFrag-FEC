@@ -4,9 +4,9 @@
  \____ \| ___ |    (_   _) ___ |/ ___)  _ \
  _____) ) ____| | | || |_| ____( (___| | | |
 (______/|_____)_|_|_| \__)_____)\____)_| |_|
-    �2013 Semtech
+    ( C )2014 Semtech
 
-Description: SX1276 FSK modem registers and bits definitions
+Description: Contains the callbacks for the IRQs and any application related details
 
 License: Revised BSD License, see LICENSE.TXT file include in the project
 

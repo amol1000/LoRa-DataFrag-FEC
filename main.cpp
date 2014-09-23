@@ -315,41 +315,41 @@ int main()
 
 void OnTxDone( void )
 {
-    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r", NULL );
     Radio.Sleep( );
     State = TX;
+    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r", NULL );
 }
 
 void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r", NULL );
     Radio.Sleep( );
     BufferSize = size;
     memcpy( Buffer, payload, BufferSize );
     RssiValue = rssi;
     SnrValue = snr;
     State = RX;
+    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r", NULL );
 }
 
 void OnTxTimeout( void )
 {
-    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r", NULL );
     Radio.Sleep( );
     State = TX_TIMEOUT;
+    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r", NULL );
 }
 
 void OnRxTimeout( void )
 {
-    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r", NULL );
     Radio.Sleep( );
     Buffer[ BufferSize ] = 0;
     State = RX_TIMEOUT;
+    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r", NULL );
 }
 
 void OnRxError( void )
 {
-    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r", NULL );
     Radio.Sleep( );
     State = RX_ERROR;
+    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r", NULL );
 }
 
