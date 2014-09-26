@@ -6,7 +6,6 @@
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   0
 
-
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
 #define USE_MODEM_LORA  1
 #define USE_MODEM_FSK   !USE_MODEM_LORA
@@ -47,7 +46,7 @@
     #error "Please define a modem in the compiler options."
 #endif
 
-#define RX_TIMEOUT_VALUE                                3000000   // in us
+#define RX_TIMEOUT_VALUE                                3500000   // in us
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
 #if( defined ( TARGET_KL25Z ) )
@@ -60,10 +59,8 @@ DigitalOut led(LED1);
  *  Global variables declarations
  */
 typedef RadioState States_t;
+volatile States_t State = LOWPOWER;
 
-/*
- *  Global variables declarations
- */
 SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError, NULL, NULL );
 
 const uint8_t PingMsg[] = "PING";
@@ -71,8 +68,6 @@ const uint8_t PongMsg[] = "PONG";
 
 uint16_t BufferSize = BUFFER_SIZE;
 uint8_t Buffer[BUFFER_SIZE];
-
-volatile States_t State = LOWPOWER;
 
 int16_t RssiValue = 0.0;
 int8_t SnrValue = 0.0;
@@ -82,46 +77,30 @@ int main()
     uint8_t i;
     bool isMaster = true;
     
-    debug( "\n\r\n\r     SX1276 Ping Pong Demo Application \n\r" );
-        
-#if defined TARGET_NUCLEO_L152RE
-    debug_if( DEBUG_MESSAGE, "         > Nucleo-L152RE Platform <\r\n", NULL );
-#elif defined TARGET_KL25Z
-    debug_if( DEBUG_MESSAGE, "         > KL25Z Platform <\r\n", NULL );
-#elif defined TARGET_LPC11U6X
-    debug_if( DEBUG_MESSAGE, "         > LPC11U6X Platform <\r\n", NULL );
-#else
-    debug_if( DEBUG_MESSAGE, "         > Untested Platform <\r\n", NULL );
-#endif
+    debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
     
-    if( Radio.DetectBoardType( ) == SX1276MB1LAS )
+    // verify the connection with the board
+    while( Radio.Read( REG_VERSION ) == 0x00  )
     {
-        debug_if( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1LAS < \n\r", NULL );
+        debug( "Radio could not be detected!\n\r", NULL );
+        wait( 1 );
     }
-    else
-    {
-        debug_if( DEBUG_MESSAGE, "\n\r > Board Type: SX1276MB1MAS < \n\r", NULL );
-    }
-    
-    debug_if( DEBUG_MESSAGE, " > Chipset Version = 0x%x < \n\r", Radio.Read( REG_VERSION ) );
+            
+    debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ) , "\n\r > Board Type: SX1276MB1LAS < \n\r" );
+    debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ) , "\n\r > Board Type: SX1276MB1MAS < \n\r" );
     
     Radio.SetChannel( RF_FREQUENCY ); 
 
 #if USE_MODEM_LORA == 1
     
-    if( LORA_FHSS_ENABLED == true )
-    {
-        debug("\n\r\n\r              > LORA FHSS Mode < \n\r\n\r");
-    }
-    else
-    {
-        debug("\n\r\n\r              > LORA Mode < \n\r\n\r");
-    }
+    debug_if( LORA_FHSS_ENABLED, "\n\n\r             > LORA FHSS Mode < \n\n\r");
+    debug_if( !LORA_FHSS_ENABLED, "\n\n\r             > LORA Mode < \n\n\r");
+
     Radio.SetTxConfig( MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                          LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                          LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
                          LORA_CRC_ENABLED, LORA_FHSS_ENABLED, LORA_NB_SYMB_HOP, 
-                         LORA_IQ_INVERSION_ON, 3000000 );
+                         LORA_IQ_INVERSION_ON, 2000000 );
     
     Radio.SetRxConfig( MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
                          LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
@@ -131,11 +110,11 @@ int main()
                          
 #elif USE_MODEM_FSK == 1
 
-    debug("\n\r\n\r              > FSK Mode < \n\r\n\r");
+    debug("\n\n\r              > FSK Mode < \n\n\r");
     Radio.SetTxConfig( MODEM_FSK, TX_OUTPUT_POWER, FSK_FDEV, 0,
                          FSK_DATARATE, 0,
                          FSK_PREAMBLE_LENGTH, FSK_FIX_LENGTH_PAYLOAD_ON,
-                         FSK_CRC_ENABLED, 0, 0, 0, 3000000 );
+                         FSK_CRC_ENABLED, 0, 0, 0, 2000000 );
     
     Radio.SetRxConfig( MODEM_FSK, FSK_BANDWIDTH, FSK_DATARATE,
                          0, FSK_AFC_BANDWIDTH, FSK_PREAMBLE_LENGTH,
@@ -148,7 +127,7 @@ int main()
 
 #endif
      
-    debug_if( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n", NULL ); 
+    debug_if( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" ); 
         
     led = 0;
         
@@ -168,10 +147,7 @@ int main()
                         led = !led;
                         debug( "...Pong\r\n" );
                         // Send the next PING frame            
-                        Buffer[0] = 'P';
-                        Buffer[1] = 'I';
-                        Buffer[2] = 'N';
-                        Buffer[3] = 'G';
+                        strcpy( ( char* )Buffer, ( char* )PingMsg );
                         // We fill the buffer with numbers for the payload 
                         for( i = 4; i < BufferSize; i++ )
                         {
@@ -185,11 +161,8 @@ int main()
                         debug( "...Ping\r\n" );
                         led = !led;
                         isMaster = false;
-                        // Send the next PING frame            
-                        Buffer[0] = 'P';
-                        Buffer[1] = 'O';
-                        Buffer[2] = 'N';
-                        Buffer[3] = 'G';
+                        // Send the next PONG frame            
+                        strcpy( ( char* )Buffer, ( char* )PongMsg );
                         // We fill the buffer with numbers for the payload 
                         for( i = 4; i < BufferSize; i++ )
                         {
@@ -214,10 +187,7 @@ int main()
                         led = !led;
                         debug( "...Ping\r\n" );
                         // Send the reply to the PING string
-                        Buffer[0] = 'P';
-                        Buffer[1] = 'O';
-                        Buffer[2] = 'N';
-                        Buffer[3] = 'G';
+                        strcpy( ( char* )Buffer, ( char* )PongMsg );
                         // We fill the buffer with numbers for the payload 
                         for( i = 4; i < BufferSize; i++ )
                         {
@@ -252,10 +222,7 @@ int main()
             if( isMaster == true )
             {
                 // Send the next PING frame
-                Buffer[0] = 'P';
-                Buffer[1] = 'I';
-                Buffer[2] = 'N';
-                Buffer[3] = 'G';
+                strcpy( ( char* )Buffer, ( char* )PingMsg );
                 for( i = 4; i < BufferSize; i++ )
                 {
                     Buffer[i] = i - 4;
@@ -270,13 +237,11 @@ int main()
             State = LOWPOWER;
             break;
         case RX_ERROR:
+            // We have received a Packet with a CRC error, send reply as if packet was correct
             if( isMaster == true )
             {
                 // Send the next PING frame
-                Buffer[0] = 'P';
-                Buffer[1] = 'I';
-                Buffer[2] = 'N';
-                Buffer[3] = 'G';
+                strcpy( ( char* )Buffer, ( char* )PingMsg );
                 for( i = 4; i < BufferSize; i++ )
                 {
                     Buffer[i] = i - 4;
@@ -287,10 +252,7 @@ int main()
             else
             {
                 // Send the next PONG frame
-                Buffer[0] = 'P';
-                Buffer[1] = 'O';
-                Buffer[2] = 'N';
-                Buffer[3] = 'G';
+                strcpy( ( char* )Buffer, ( char* )PongMsg );
                 for( i = 4; i < BufferSize; i++ )
                 {
                     Buffer[i] = i - 4;
@@ -317,7 +279,7 @@ void OnTxDone( void )
 {
     Radio.Sleep( );
     State = TX;
-    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r", NULL );
+    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r" );
 }
 
 void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
@@ -328,14 +290,14 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     RssiValue = rssi;
     SnrValue = snr;
     State = RX;
-    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r", NULL );
+    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r" );
 }
 
 void OnTxTimeout( void )
 {
     Radio.Sleep( );
     State = TX_TIMEOUT;
-    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r", NULL );
+    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r" );
 }
 
 void OnRxTimeout( void )
@@ -343,13 +305,13 @@ void OnRxTimeout( void )
     Radio.Sleep( );
     Buffer[ BufferSize ] = 0;
     State = RX_TIMEOUT;
-    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r", NULL );
+    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r" );
 }
 
 void OnRxError( void )
 {
     Radio.Sleep( );
     State = RX_ERROR;
-    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r", NULL );
+    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r" );
 }
 
