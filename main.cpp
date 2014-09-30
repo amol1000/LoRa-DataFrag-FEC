@@ -1,7 +1,7 @@
 #include "mbed.h"
 #include "main.h"
 #include "sx1276-hal.h"
-#include "mbed_debug.h"
+#include "debug.h"
 
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   0
@@ -49,7 +49,7 @@
 #define RX_TIMEOUT_VALUE                                3500000   // in us
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
-#if( defined ( TARGET_KL25Z ) )
+#if( defined ( TARGET_KL25Z ) || defined ( TARGET_LPC11U6X ) )
 DigitalOut led(LED2);
 #else
 DigitalOut led(LED1);
