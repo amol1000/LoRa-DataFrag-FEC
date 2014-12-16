@@ -104,7 +104,7 @@ int main()
     
     Radio.SetRxConfig( MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
                          LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
-                         LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
+                         LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON, 0,
                          LORA_CRC_ENABLED, LORA_FHSS_ENABLED, LORA_NB_SYMB_HOP, 
                          LORA_IQ_INVERSION_ON, true );
                          
@@ -118,7 +118,7 @@ int main()
     
     Radio.SetRxConfig( MODEM_FSK, FSK_BANDWIDTH, FSK_DATARATE,
                          0, FSK_AFC_BANDWIDTH, FSK_PREAMBLE_LENGTH,
-                         0, FSK_FIX_LENGTH_PAYLOAD_ON, FSK_CRC_ENABLED,
+                         0, FSK_FIX_LENGTH_PAYLOAD_ON, 0, FSK_CRC_ENABLED,
                          0, 0, false, true );
                          
 #else
