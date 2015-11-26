@@ -58,10 +58,33 @@ DigitalOut led(LED1);
 /*
  *  Global variables declarations
  */
-typedef RadioState States_t;
-volatile States_t State = LOWPOWER;
+typedef enum
+{
+    LOWPOWER = 0,
+    IDLE,
+    
+    RX,
+    RX_TIMEOUT,
+    RX_ERROR,
+    
+    TX,
+    TX_TIMEOUT,
+    
+    CAD,
+    CAD_DONE
+}AppStates_t;
 
-SX1276MB1xAS Radio( OnTxDone, OnTxTimeout, OnRxDone, OnRxTimeout, OnRxError, NULL, NULL );
+volatile AppStates_t State = LOWPOWER;
+
+/*!
+ * Radio events function pointer
+ */
+static RadioEvents_t RadioEvents;
+
+/*
+ *  Global variables declarations
+ */
+SX1276MB1xAS Radio( NULL );
 
 const uint8_t PingMsg[] = "PING";
 const uint8_t PongMsg[] = "PONG";
@@ -78,6 +101,14 @@ int main()
     bool isMaster = true;
     
     debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
+
+    // Initialize Radio driver
+    RadioEvents.TxDone = OnTxDone;
+    RadioEvents.RxDone = OnRxDone;
+    RadioEvents.RxError = OnRxError;
+    RadioEvents.TxTimeout = OnTxTimeout;
+    RadioEvents.RxTimeout = OnRxTimeout;
+    Radio.Init( &RadioEvents );
     
     // verify the connection with the board
     while( Radio.Read( REG_VERSION ) == 0x00  )
