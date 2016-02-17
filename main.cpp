@@ -1,10 +1,10 @@
 #include "mbed.h"
 #include "main.h"
-#include "sx1276-hal.h"
+#include "sx1272-hal.h"
 #include "debug.h"
 
 /* Set this flag to '1' to display debug messages on the console */
-#define DEBUG_MESSAGE   0
+#define DEBUG_MESSAGE   1
 
 /* Set this flag to '1' to use the LoRa modulation or to '0' to use FSK modulation */
 #define USE_MODEM_LORA  1
@@ -84,7 +84,7 @@ static RadioEvents_t RadioEvents;
 /*
  *  Global variables declarations
  */
-SX1276MB1xAS Radio( NULL );
+SX1272MB2xAS Radio( NULL );
 
 const uint8_t PingMsg[] = "PING";
 const uint8_t PongMsg[] = "PONG";
@@ -100,7 +100,7 @@ int main()
     uint8_t i;
     bool isMaster = true;
     
-    debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
+    debug( "\n\n\r     SX1272 Ping Pong Demo Application \n\n\r" );
 
     // Initialize Radio driver
     RadioEvents.TxDone = OnTxDone;
@@ -117,9 +117,8 @@ int main()
         wait( 1 );
     }
             
-    debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ) , "\n\r > Board Type: SX1276MB1LAS < \n\r" );
-    debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ) , "\n\r > Board Type: SX1276MB1MAS < \n\r" );
-    
+    debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1272MB2XAS ) ) , "\n\r > Board Type: SX1272MB2xAS < \n\r" );
+  
     Radio.SetChannel( RF_FREQUENCY ); 
 
 #if USE_MODEM_LORA == 1
