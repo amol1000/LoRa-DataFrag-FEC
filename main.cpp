@@ -1,7 +1,6 @@
 #include "mbed.h"
 #include "main.h"
 #include "sx1276-hal.h"
-#include "debug.h"
 
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   1
