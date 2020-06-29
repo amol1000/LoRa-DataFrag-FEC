@@ -80,6 +80,7 @@ volatile AppStates_t State = LOWPOWER;
  */
 static RadioEvents_t RadioEvents;
 
+RawSerial pc(USBTX, USBRX);
 /*
  *  Global variables declarations
  */
@@ -98,7 +99,16 @@ int main( void )
 {
     uint8_t i;
     bool isMaster = true;
+    uint32_t rx_count = 0;
+    uint32_t tx_count = 0;
 
+    while(1){
+        debug("Press 1 to start, isMaster(%d)\r\n", isMaster);
+        char c = pc.getc();
+        if(c == '1'){
+             break;
+        }
+    }
     debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
 
     // Initialize Radio driver
@@ -165,9 +175,17 @@ int main( void )
 
     while( 1 )
     {
+        debug("Is master %d \r\n", isMaster);
+        if(tx_count >= 100){
+            debug("Sent 100 packets\r\n");
+            debug("Got %d replies\r\n", rx_count);
+            Radio.Sleep();
+            break; 
+        }
         switch( State )
         {
         case RX:
+            rx_count++;
             if( isMaster == true )
             {
                 if( BufferSize > 0 )
@@ -175,7 +193,7 @@ int main( void )
                     if( strncmp( ( const char* )Buffer, ( const char* )PongMsg, 4 ) == 0 )
                     {
                         led = !led;
-                        debug( "...Pong\r\n" );
+                        debug( "...Pong received \r\n" );
                         // Send the next PING frame
                         strcpy( ( char* )Buffer, ( char* )PingMsg );
                         // We fill the buffer with numbers for the payload
@@ -185,10 +203,11 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
+                        tx_count++;
                     }
                     else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     { // A master already exists then become a slave
-                        debug( "...Ping\r\n" );
+                        debug( "...Ping received\r\n" );
                         led = !led;
                         isMaster = false;
                         // Send the next PONG frame
@@ -200,6 +219,7 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
+                        tx_count++;
                     }
                     else // valid reception but neither a PING or a PONG message
                     {    // Set device as master ans start again
@@ -208,7 +228,7 @@ int main( void )
                     }
                 }
             }
-            else
+            else //slave
             {
                 if( BufferSize > 0 )
                 {
@@ -225,6 +245,7 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
+                        tx_count++;
                     }
                     else // valid reception but not a PING as expected
                     {    // Set device as master and start again
@@ -239,11 +260,11 @@ int main( void )
             led = !led;
             if( isMaster == true )  
             {
-                debug( "Ping...\r\n" );
+                //debug( "Ping...\r\n" );
             }
             else
             {
-                debug( "Pong...\r\n" );
+                //debug( "Pong...\r\n" );
             }
             Radio.Rx( RX_TIMEOUT_VALUE );
             State = LOWPOWER;
@@ -259,14 +280,17 @@ int main( void )
                 }
                 wait_ms( 10 );
                 Radio.Send( Buffer, BufferSize );
+                tx_count++;
             }
             else
             {
+                debug("Master(%d): waiting for a ping\r\n", isMaster);
                 Radio.Rx( RX_TIMEOUT_VALUE );
             }
             State = LOWPOWER;
             break;
         case RX_ERROR:
+            debug("RX_ERROR\r\n");
             // We have received a Packet with a CRC error, send reply as if packet was correct
             if( isMaster == true )
             {
@@ -297,6 +321,7 @@ int main( void )
             State = LOWPOWER;
             break;
         case LOWPOWER:
+            wait_ms(1000);
             break;
         default:
             State = LOWPOWER;
@@ -309,7 +334,7 @@ void OnTxDone( void )
 {
     Radio.Sleep( );
     State = TX;
-    debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r" );
+    //debug_if( DEBUG_MESSAGE, "> OnTxDone\n\r" );
 }
 
 void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
@@ -320,14 +345,14 @@ void OnRxDone( uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr )
     RssiValue = rssi;
     SnrValue = snr;
     State = RX;
-    debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r" );
+    //debug_if( DEBUG_MESSAGE, "> OnRxDone\n\r" );
 }
 
 void OnTxTimeout( void )
 {
     Radio.Sleep( );
     State = TX_TIMEOUT;
-    debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r" );
+    //debug_if( DEBUG_MESSAGE, "> OnTxTimeout\n\r" );
 }
 
 void OnRxTimeout( void )
@@ -335,12 +360,12 @@ void OnRxTimeout( void )
     Radio.Sleep( );
     Buffer[BufferSize] = 0;
     State = RX_TIMEOUT;
-    debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r" );
+    //debug_if( DEBUG_MESSAGE, "> OnRxTimeout\n\r" );
 }
 
 void OnRxError( void )
 {
     Radio.Sleep( );
     State = RX_ERROR;
-    debug_if( DEBUG_MESSAGE, "> OnRxError\n\r" );
+    //debug_if( DEBUG_MESSAGE, "> OnRxError\n\r" );
 }
