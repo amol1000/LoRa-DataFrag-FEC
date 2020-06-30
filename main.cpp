@@ -172,12 +172,12 @@ int main( void )
     led = 0;
 
     Radio.Rx( RX_TIMEOUT_VALUE );
-
+    
     while( 1 )
     {
-        debug("Is master %d \r\n", isMaster);
-        if(tx_count >= 100){
-            debug("Sent 100 packets\r\n");
+        debug("Is master %d, state %d \r\n", isMaster, State);
+        if(tx_count >= 10){
+            debug("Sent 10 packets\r\n");
             debug("Got %d replies\r\n", rx_count);
             Radio.Sleep();
             break; 
@@ -272,6 +272,7 @@ int main( void )
         case RX_TIMEOUT:
             if( isMaster == true )
             {
+                debug("RA_TImout... sending ping\r\n");
                 // Send the next PING frame
                 strcpy( ( char* )Buffer, ( char* )PingMsg );
                 for( i = 4; i < BufferSize; i++ )
