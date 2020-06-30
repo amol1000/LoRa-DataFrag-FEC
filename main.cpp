@@ -119,7 +119,7 @@ int main( void )
     RadioEvents.RxTimeout = OnRxTimeout;
     Radio.Init( &RadioEvents );
 
-    // verify the connection with the board
+    // verify the connection with      the board
     while( Radio.Read( REG_VERSION ) == 0x00  )
     {
         debug( "Radio could not be detected!\n\r", NULL );
