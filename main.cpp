@@ -48,6 +48,7 @@
 #define RX_TIMEOUT_VALUE                                3500      // in ms
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
+#define SEC_TO_MSEC  (1000)
 #if( defined ( TARGET_KL25Z ) || defined ( TARGET_LPC11U6X ) )
 DigitalOut led( LED2 );
 #else
@@ -175,12 +176,15 @@ int main( void )
     
     while( 1 )
     {
-        debug("Is master %d, state %d \r\n", isMaster, State);
-        if(tx_count >= 10){
+        debug("Is master %d, app state %d, radio state %d \r\n", isMaster, State, Radio.GetStatus());
+        if(tx_count >= 100 && isMaster){
             debug("Sent 10 packets\r\n");
             debug("Got %d replies\r\n", rx_count);
-            Radio.Sleep();
-            break; 
+            //Radio.Sleep();
+            wait_ms(10 * SEC_TO_MSEC);
+            tx_count = 0;
+            rx_count = 0;
+            //break; 
         }
         switch( State )
         {
@@ -220,6 +224,7 @@ int main( void )
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
                         tx_count++;
+                        
                     }
                     else // valid reception but neither a PING or a PONG message
                     {    // Set device as master ans start again
@@ -245,6 +250,8 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
+                        debug("sent pong messages\r\n");
+                        Radio.Rx( RX_TIMEOUT_VALUE );
                         tx_count++;
                     }
                     else // valid reception but not a PING as expected
