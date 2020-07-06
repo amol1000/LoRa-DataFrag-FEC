@@ -1,6 +1,7 @@
 #include "mbed.h"
 #include "main.h"
 #include "sx1276-hal.h"
+#include "frag.h"
 
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   1
@@ -54,6 +55,30 @@ DigitalOut led( LED2 );
 #else
 DigitalOut led( LED1 );
 #endif
+
+
+/* brief::
+M == The  initial  data  block  that  needs  to  be  transported  must
+     first  be  fragmented  into  M  data 417fragments  of arbitrary  but  equal  length
+N == bytes to be sent
+*/
+#define FRAG_NB                 (10) // data block will be divided into 10 fragments
+#define FRAG_SIZE               (10) // each fragment size will be 10 bytes
+// thus data block size is 10 * 10 == 100
+#define FRAG_CR                 (FRAG_NB + 10) // basically M/N
+#define FRAG_PER                (0.2) // changes the lost packet count
+#define FRAG_TOLERENCE          (10 + FRAG_NB * (FRAG_PER + 0.05))
+#define LOOP_TIMES              (1)
+#define DEBUG
+
+frag_enc_t encobj;
+uint8_t enc_dt[FRAG_NB * FRAG_SIZE]; // 100 bytes
+uint8_t enc_buf[FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR]; // //100 + 20 * 10 + 20 * 10 == 500 bytes
+
+frag_dec_t decobj;
+uint8_t dec_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE + 1024*1024];
+uint8_t dec_flash_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE + 1024*1024];
+
 
 /*
  *  Global variables declarations
@@ -177,7 +202,7 @@ int main( void )
     while( 1 )
     {
         debug("Is master %d, app state %d, radio state %d \r\n", isMaster, State, Radio.GetStatus());
-        if(tx_count >= 100 && isMaster){
+        if(tx_count >= 1000 && isMaster){
             debug("Sent 10 packets\r\n");
             debug("Got %d replies\r\n", rx_count);
             //Radio.Sleep();
@@ -228,7 +253,7 @@ int main( void )
                     }
                     else // valid reception but neither a PING or a PONG message
                     {    // Set device as master ans start again
-                        isMaster = true;
+                        //isMaster = true;
                         Radio.Rx( RX_TIMEOUT_VALUE );
                     }
                 }
@@ -256,7 +281,7 @@ int main( void )
                     }
                     else // valid reception but not a PING as expected
                     {    // Set device as master and start again
-                        isMaster = true;
+                        //isMaster = true;
                         Radio.Rx( RX_TIMEOUT_VALUE );
                     }
                 }
