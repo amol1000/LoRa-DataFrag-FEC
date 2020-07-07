@@ -1,7 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <stdbool.h>
-#include <stdint.h>
+#include <cstdint>
 #include "bitmap.h"
 
 static int count_bits(uint32_t num);

@@ -1,7 +1,10 @@
 #include "mbed.h"
 #include "main.h"
 #include "sx1276-hal.h"
-#include "frag.h"
+
+extern "C"{
+    #include "frag.h"
+}
 
 /* Set this flag to '1' to display debug messages on the console */
 #define DEBUG_MESSAGE   1
@@ -121,6 +124,45 @@ uint8_t Buffer[BUFFER_SIZE];
 int16_t RssiValue = 0.0;
 int8_t SnrValue = 0.0;
 
+void putbuf(uint8_t *buf, int len)
+{
+    int i;
+    for (i = 0; i < len; i++) {
+        printf("%02X ", buf[i]);
+    }
+    printf("\n");
+}
+
+void put_bool_buf(uint8_t *buf, int len)
+{
+    int i;
+    for (i = 0; i < len; i++) {
+        printf("%d ", buf[i]);
+    }
+    printf("\n");
+}
+
+void frag_encobj_log(frag_enc_t *encobj)
+{
+
+    int i;
+
+    printf("uncoded blocks:\n");
+    for (i = 0; i < encobj->num * encobj->unit; i += encobj->unit) {
+        putbuf(encobj->line + i, encobj->unit);
+    }
+
+    printf("\ncoded blocks:\n");
+    for (i = 0; i < encobj->cr * encobj->unit; i += encobj->unit) {
+        putbuf(encobj->rline + i, encobj->unit);
+    }
+
+    printf("\nmatrix line:\n");
+    for (i = 0; i < encobj->num * encobj->cr; i += encobj->num) {
+        put_bool_buf(encobj->mline + i, encobj->num);
+    }
+}
+
 int main( void ) 
 {
     uint8_t i;
@@ -128,6 +170,17 @@ int main( void )
     uint32_t rx_count = 0;
     uint32_t tx_count = 0;
 
+    if(isMaster){
+        for (i = 0; i < FRAG_NB * FRAG_SIZE; i++) {
+            enc_dt[i] = i;
+        }
+
+        encobj.dt = enc_buf;
+        encobj.maxlen = sizeof(enc_buf);
+        int ret = frag_enc(&encobj, enc_dt, FRAG_NB * FRAG_SIZE, FRAG_SIZE, FRAG_CR);
+        printf("enc ret %d, maxlen %d\n", ret, encobj.maxlen);
+        frag_encobj_log(&encobj);
+    }
     while(1){
         debug("Press 1 to start, isMaster(%d)\r\n", isMaster);
         char c = pc.getc();
