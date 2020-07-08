@@ -4,6 +4,7 @@
 
 extern "C"{
     #include "frag.h"
+    #include "packets.h"
 }
 
 /* Set this flag to '1' to display debug messages on the console */
@@ -73,15 +74,18 @@ N == bytes to be sent
 #define FRAG_TOLERENCE          (10 + FRAG_NB * (FRAG_PER + 0.05))
 #define LOOP_TIMES              (1)
 #define DEBUG
+#define IS_MASTER   (1)
 
+#if IS_MASTER
 frag_enc_t encobj;
 uint8_t enc_dt[FRAG_NB * FRAG_SIZE]; // 100 bytes
 uint8_t enc_buf[FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR]; // //100 + 20 * 10 + 20 * 10 == 500 bytes
 
+#else
 frag_dec_t decobj;
-uint8_t dec_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE + 1024*1024];
-uint8_t dec_flash_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE + 1024*1024];
-
+uint8_t dec_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE ];
+uint8_t dec_flash_buf[(FRAG_NB + FRAG_CR) * FRAG_SIZE];
+#endif
 
 /*
  *  Global variables declarations
@@ -119,27 +123,40 @@ const uint8_t PingMsg[] = "PING";
 const uint8_t PongMsg[] = "PONG";
 
 uint16_t BufferSize = BUFFER_SIZE;
-uint8_t Buffer[BUFFER_SIZE];
+uint8_t Buffer[BUFFER_SIZE]; // cast into packet, each packet can be of size 21 bytes
 
 int16_t RssiValue = 0.0;
 int8_t SnrValue = 0.0;
 
+#if !IS_MASTER
+int flash_write(uint32_t addr, uint8_t *buf, uint32_t len)
+{
+    memcpy(dec_flash_buf + addr, buf, len);
+    return 0;
+}
+
+int flash_read(uint32_t addr, uint8_t *buf, uint32_t len)
+{
+    memcpy(buf, dec_flash_buf + addr, len);
+    return 0;
+}
+#endif
 void putbuf(uint8_t *buf, int len)
 {
     int i;
     for (i = 0; i < len; i++) {
-        printf("%02X ", buf[i]);
+        debug("%02X ", buf[i]);
     }
-    printf("\n");
+    debug("\r\n");
 }
 
 void put_bool_buf(uint8_t *buf, int len)
 {
     int i;
     for (i = 0; i < len; i++) {
-        printf("%d ", buf[i]);
+        debug("%d ", buf[i]);
     }
-    printf("\n");
+    debug("\r\n");
 }
 
 void frag_encobj_log(frag_enc_t *encobj)
@@ -147,17 +164,17 @@ void frag_encobj_log(frag_enc_t *encobj)
 
     int i;
 
-    printf("uncoded blocks:\n");
+    printf("uncoded blocks:\r\n");
     for (i = 0; i < encobj->num * encobj->unit; i += encobj->unit) {
         putbuf(encobj->line + i, encobj->unit);
     }
 
-    printf("\ncoded blocks:\n");
+    printf("\ncoded blocks:\r\n");
     for (i = 0; i < encobj->cr * encobj->unit; i += encobj->unit) {
         putbuf(encobj->rline + i, encobj->unit);
     }
 
-    printf("\nmatrix line:\n");
+    printf("\nmatrix line:\r\n");
     for (i = 0; i < encobj->num * encobj->cr; i += encobj->num) {
         put_bool_buf(encobj->mline + i, encobj->num);
     }
@@ -166,10 +183,20 @@ void frag_encobj_log(frag_enc_t *encobj)
 int main( void ) 
 {
     uint8_t i;
-    bool isMaster = true;
+    bool isMaster = IS_MASTER;
     uint32_t rx_count = 0;
     uint32_t tx_count = 0;
+    uint8_t frag_tx = 0;
 
+    while(1){
+        debug("Press 1 to start, isMaster(%d)\r\n", isMaster);
+        char c = pc.getc();
+        if(c == '1'){
+             break;
+        }
+    }
+
+#if IS_MASTER == 1 
     if(isMaster){
         for (i = 0; i < FRAG_NB * FRAG_SIZE; i++) {
             enc_dt[i] = i;
@@ -178,16 +205,27 @@ int main( void )
         encobj.dt = enc_buf;
         encobj.maxlen = sizeof(enc_buf);
         int ret = frag_enc(&encobj, enc_dt, FRAG_NB * FRAG_SIZE, FRAG_SIZE, FRAG_CR);
-        printf("enc ret %d, maxlen %d\n", ret, encobj.maxlen);
+        printf("enc ret %d, maxlen %d\r\n", ret, encobj.maxlen);
         frag_encobj_log(&encobj);
     }
-    while(1){
-        debug("Press 1 to start, isMaster(%d)\r\n", isMaster);
-        char c = pc.getc();
-        if(c == '1'){
-             break;
-        }
+#elif IS_MASTER == 0
+    if(!isMaster) {
+        printf("\n\n-------------------\n");
+        decobj.cfg.dt = dec_buf;
+        decobj.cfg.maxlen = sizeof(dec_buf);
+        decobj.cfg.nb = FRAG_NB;
+        decobj.cfg.size = FRAG_SIZE;
+        decobj.cfg.tolerence = FRAG_TOLERENCE;
+        decobj.cfg.frd_func = flash_read;
+        decobj.cfg.fwr_func = flash_write;
+        int len = frag_dec_init(&decobj);
+        debug("memory cost: %d, nb %d, size %d, tol %d\n",
+           len,
+           decobj.cfg.nb,
+           decobj.cfg.size,
+           decobj.cfg.tolerence);    
     }
+#endif
     debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
 
     // Initialize Radio driver
@@ -254,16 +292,6 @@ int main( void )
     
     while( 1 )
     {
-        debug("Is master %d, app state %d, radio state %d \r\n", isMaster, State, Radio.GetStatus());
-        if(tx_count >= 1000 && isMaster){
-            debug("Sent 10 packets\r\n");
-            debug("Got %d replies\r\n", rx_count);
-            //Radio.Sleep();
-            wait_ms(10 * SEC_TO_MSEC);
-            tx_count = 0;
-            rx_count = 0;
-            //break; 
-        }
         switch( State )
         {
         case RX:
@@ -315,28 +343,15 @@ int main( void )
             {
                 if( BufferSize > 0 )
                 {
-                    if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
-                    {
-                        led = !led;
-                        debug( "...Ping\r\n" );
-                        // Send the reply to the PING string
-                        strcpy( ( char* )Buffer, ( char* )PongMsg );
-                        // We fill the buffer with numbers for the payload
-                        for( i = 4; i < BufferSize; i++ )
-                        {
-                            Buffer[i] = i - 4;
-                        }
-                        wait_ms( 10 );
-                        Radio.Send( Buffer, BufferSize );
-                        debug("sent pong messages\r\n");
-                        Radio.Rx( RX_TIMEOUT_VALUE );
-                        tx_count++;
-                    }
-                    else // valid reception but not a PING as expected
-                    {    // Set device as master and start again
-                        //isMaster = true;
-                        Radio.Rx( RX_TIMEOUT_VALUE );
-                    }
+                    debug("Data from master\r\n");
+                    dataFrag *packet = (dataFrag*) Buffer;
+                    //putbuf(Buffer, BUFFER_SIZE);
+                    
+                    debug("seq_num %d\r\n", packet->seqNum);
+                    putbuf(packet->data, FRAG_SIZE);
+                    
+                    
+                    Radio.Rx( RX_TIMEOUT_VALUE );
                 }
             }
             State = LOWPOWER;
@@ -355,22 +370,35 @@ int main( void )
             State = LOWPOWER;
             break;
         case RX_TIMEOUT:
+#if IS_MASTER
             if( isMaster == true )
             {
-                debug("RA_TImout... sending ping\r\n");
-                // Send the next PING frame
-                strcpy( ( char* )Buffer, ( char* )PingMsg );
-                for( i = 4; i < BufferSize; i++ )
-                {
-                    Buffer[i] = i - 4;
+                if(frag_tx >= encobj.num + encobj.cr){
+                    break;    
                 }
+                debug("RX_Timeout... sending data set fragments\r\n");
+                debug("sending fragment: \t");
+                putbuf(encobj.line + frag_tx*FRAG_SIZE, FRAG_SIZE);
+
+                dataFrag *packet;
+                packet->seqNum = frag_tx;
+                memcpy(packet->data, encobj.line + frag_tx * FRAG_SIZE, FRAG_SIZE);
+                //memcpy(Buffer, packet, sizeof(packet));
+                /*for( i = FRAG_SIZE; i < BufferSize; i++ )
+                {
+                    Buffer[i] = '\0';
+                }*/
                 wait_ms( 10 );
-                Radio.Send( Buffer, BufferSize );
-                tx_count++;
+                debug("sending packet with seq: %d & data : \t", packet->seqNum);
+                putbuf(packet->data, FRAG_SIZE);
+                Radio.Send( (uint8_t*)packet, BUFFER_SIZE);
+                frag_tx++;
+                //tx_count++;
             }
-            else
+#endif
+            if(!isMaster)
             {
-                debug("Master(%d): waiting for a ping\r\n", isMaster);
+                debug("Master(%d): waiting for data \r\n", isMaster);
                 Radio.Rx( RX_TIMEOUT_VALUE );
             }
             State = LOWPOWER;
