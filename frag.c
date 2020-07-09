@@ -308,10 +308,12 @@ int frag_dec(frag_dec_t *obj, uint16_t fcnt, uint8_t *buf, int len)
     bool no_info;
 
     if (obj->sta == FRAG_DEC_STA_DONE) {
+        //////////debug("line 311, returning %d\r\n", obj->lost_frm_count);
         return obj->lost_frm_count;
     }
 
     if (len != obj->cfg.size) {
+        ////debug("line 316, invalid frame\r\n");
         return FRAG_DEC_ERR_INVALID_FRAME;
     }
 
@@ -332,6 +334,7 @@ int frag_dec(frag_dec_t *obj, uint16_t fcnt, uint8_t *buf, int len)
         /* if no frame lost finish decode process */
         if (obj->lost_frm_count == 0) {
             obj->sta = FRAG_DEC_STA_DONE;
+            //////debug("line 337 returning %d\r\n", obj->lost_frm_count);
             return obj->lost_frm_count;
         }
     } else {
@@ -340,6 +343,7 @@ int frag_dec(frag_dec_t *obj, uint16_t fcnt, uint8_t *buf, int len)
         /* too many packets are lost, it is not possible to reconstruct data block */
         if (obj->lost_frm_count > obj->cfg.tolerence) {
             /* too many frames are lost, memory is not enough to reconstruct the packets */
+            //////debug("line 346, too many frames lost \r\n");
             return FRAG_DEC_ERR_TOO_MANY_FRAME_LOST;
         }
         unmatched_frame_cnt = 0;
@@ -359,6 +363,7 @@ int frag_dec(frag_dec_t *obj, uint16_t fcnt, uint8_t *buf, int len)
             }
         }
         if (unmatched_frame_cnt <= 0) {
+            //////debug("line 366, ongoing\r\n");
             return FRAG_DEC_ONGOING;
         }
 
@@ -428,10 +433,12 @@ int frag_dec(frag_dec_t *obj, uint16_t fcnt, uint8_t *buf, int len)
                 }
             }
             obj->sta = FRAG_DEC_STA_DONE;
+            //////debug("line 436, returning %d\r\n", obj->lost_frm_count);
             return obj->lost_frm_count;
         }
     }
     /* process ongoing */
+    //debug("line 441, ongoing\r\n");
     return FRAG_DEC_ONGOING;
 }
 
@@ -484,15 +491,15 @@ void frag_dec_log_matrix_bits(bm_t *bitmap, int len)
 void frag_dec_log(frag_dec_t *obj)
 {
     int i, j;
-    FRAGLOG("Decode %s\n", (obj->sta == FRAG_DEC_STA_DONE) ? "ok" : "ng");
+    FRAGLOG("Decode %s\r\n", (obj->sta == FRAG_DEC_STA_DONE) ? "ok" : "ng");
     for (i = 0; i < obj->cfg.nb; i++) {
         frag_dec_flash_rd(obj, i, obj->row_data_buf);
         for (j = 0; j < obj->cfg.size; j++) {
             FRAGLOG("%02X ", obj->row_data_buf[j]);
         }
-        FRAGLOG("\n");
+        FRAGLOG("\r\n");
     }
 
-    FRAGLOG("lost_frm_matrix_bm: (%d) \n", obj->lost_frm_count);
+    FRAGLOG("lost_frm_matrix_bm: (%d) \r\n", obj->lost_frm_count);
     frag_dec_log_matrix_bits(obj->lost_frm_matrix_bm, obj->lost_frm_count);
 }

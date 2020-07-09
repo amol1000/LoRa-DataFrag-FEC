@@ -69,12 +69,12 @@ N == bytes to be sent
 #define FRAG_NB                 (10) // data block will be divided into 10 fragments
 #define FRAG_SIZE               (10) // each fragment size will be 10 bytes
 // thus data block size is 10 * 10 == 100
-#define FRAG_CR                 (FRAG_NB + 10) // basically M/N
-#define FRAG_PER                (0.2) // changes the lost packet count
+#define FRAG_CR                 (FRAG_NB + 0) // basically M/N
+#define FRAG_PER                (0.7)// changes the lost packet count
 #define FRAG_TOLERENCE          (10 + FRAG_NB * (FRAG_PER + 0.05))
 #define LOOP_TIMES              (1)
 #define DEBUG
-#define IS_MASTER   (1)
+#define IS_MASTER               (1)
 
 #if IS_MASTER
 frag_enc_t encobj;
@@ -118,9 +118,6 @@ RawSerial pc(USBTX, USBRX);
  *  Global variables declarations
  */
 SX1276MB1xAS Radio( NULL );
-
-const uint8_t PingMsg[] = "PING";
-const uint8_t PongMsg[] = "PONG";
 
 uint16_t BufferSize = BUFFER_SIZE;
 uint8_t Buffer[BUFFER_SIZE]; // cast into packet, each packet can be of size 21 bytes
@@ -184,8 +181,6 @@ int main( void )
 {
     uint8_t i;
     bool isMaster = IS_MASTER;
-    uint32_t rx_count = 0;
-    uint32_t tx_count = 0;
     uint8_t frag_tx = 0;
 
     while(1){
@@ -295,7 +290,8 @@ int main( void )
         switch( State )
         {
         case RX:
-            rx_count++;
+            //rx_count++;
+#if isMaster == 1
             if( isMaster == true )
             {
                 if( BufferSize > 0 )
@@ -313,7 +309,7 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
-                        tx_count++;
+                        //tx_count++;
                     }
                     else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
                     { // A master already exists then become a slave
@@ -329,7 +325,7 @@ int main( void )
                         }
                         wait_ms( 10 );
                         Radio.Send( Buffer, BufferSize );
-                        tx_count++;
+                        //tx_count++;
                         
                     }
                     else // valid reception but neither a PING or a PONG message
@@ -339,7 +335,8 @@ int main( void )
                     }
                 }
             }
-            else //slave
+#elif IS_MASTER == 0
+            if(!isMaster) //slave
             {
                 if( BufferSize > 0 )
                 {
@@ -350,10 +347,30 @@ int main( void )
                     debug("seq_num %d\r\n", packet->seqNum);
                     putbuf(packet->data, FRAG_SIZE);
                     
+                    if(packet->seqNum == 8 || packet->seqNum == 5 || packet->seqNum == 4 || packet->seqNum == 3){
+                        debug("data dropped\r\n");
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        State = LOWPOWER;
+                        break;    
+                    }
                     
-                    Radio.Rx( RX_TIMEOUT_VALUE );
+                    int ret = frag_dec(&decobj, packet->seqNum+1, packet->data, decobj.cfg.size);
+                    if (ret == FRAG_DEC_ONGOING) {
+                        //printf("\n");
+                        debug(" decoding ongoing\r\n");
+                    } else if (ret >= 0) {
+                        printf("dec complete (reconstruct %d packets)\r\n", ret);
+                        frag_dec_log(&decobj);
+                        break;
+                    } else {
+                        printf("dec error %d\r\n", ret);
+                        frag_dec_log(&decobj);
+                        break;
+                    }
                 }
             }
+#endif      
+            Radio.Rx( RX_TIMEOUT_VALUE );
             State = LOWPOWER;
             break;
         case TX:
@@ -370,27 +387,28 @@ int main( void )
             State = LOWPOWER;
             break;
         case RX_TIMEOUT:
-#if IS_MASTER
+#if IS_MASTER == 1
             if( isMaster == true )
             {
                 if(frag_tx >= encobj.num + encobj.cr){
                     break;    
                 }
                 debug("RX_Timeout... sending data set fragments\r\n");
-                debug("sending fragment: \t");
-                putbuf(encobj.line + frag_tx*FRAG_SIZE, FRAG_SIZE);
-
-                dataFrag *packet;
+                debug("sending fragment:%d: \t", frag_tx);
+                
+                dataFrag Frag = {0, {0}, {0}};
+                dataFrag *packet = &Frag;//(dataFrag*)malloc(sizeof(dataFrag));
                 packet->seqNum = frag_tx;
                 memcpy(packet->data, encobj.line + frag_tx * FRAG_SIZE, FRAG_SIZE);
+                putbuf(encobj.line + frag_tx*FRAG_SIZE, FRAG_SIZE);
                 //memcpy(Buffer, packet, sizeof(packet));
                 /*for( i = FRAG_SIZE; i < BufferSize; i++ )
                 {
                     Buffer[i] = '\0';
                 }*/
-                wait_ms( 10 );
                 debug("sending packet with seq: %d & data : \t", packet->seqNum);
                 putbuf(packet->data, FRAG_SIZE);
+                wait_ms( 10 );
                 Radio.Send( (uint8_t*)packet, BUFFER_SIZE);
                 frag_tx++;
                 //tx_count++;
@@ -405,29 +423,6 @@ int main( void )
             break;
         case RX_ERROR:
             debug("RX_ERROR\r\n");
-            // We have received a Packet with a CRC error, send reply as if packet was correct
-            if( isMaster == true )
-            {
-                // Send the next PING frame
-                strcpy( ( char* )Buffer, ( char* )PingMsg );
-                for( i = 4; i < BufferSize; i++ )
-                {
-                    Buffer[i] = i - 4;
-                }
-                wait_ms( 10 );
-                Radio.Send( Buffer, BufferSize );
-            }
-            else
-            {
-                // Send the next PONG frame
-                strcpy( ( char* )Buffer, ( char* )PongMsg );
-                for( i = 4; i < BufferSize; i++ )
-                {
-                    Buffer[i] = i - 4;
-                }
-                wait_ms( 10 );
-                Radio.Send( Buffer, BufferSize );
-            }
             State = LOWPOWER;
             break;
         case TX_TIMEOUT:
