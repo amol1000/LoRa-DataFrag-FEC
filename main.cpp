@@ -78,7 +78,6 @@ N == bytes to be sent
 
 #if IS_MASTER
 frag_enc_t encobj;
-uint8_t enc_dt[FRAG_NB * FRAG_SIZE]; // 100 bytes
 uint8_t enc_buf[FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR]; // //100 + 20 * 10 + 20 * 10 == 500 bytes
 
 #else
@@ -194,12 +193,12 @@ int main( void )
 #if IS_MASTER == 1 
     if(isMaster){
         for (i = 0; i < FRAG_NB * FRAG_SIZE; i++) {
-            enc_dt[i] = i;
+            enc_buf[i] = i;
         }
 
         encobj.dt = enc_buf;
         encobj.maxlen = sizeof(enc_buf);
-        int ret = frag_enc(&encobj, enc_dt, FRAG_NB * FRAG_SIZE, FRAG_SIZE, FRAG_CR);
+        int ret = frag_enc(&encobj, enc_buf, FRAG_NB * FRAG_SIZE, FRAG_SIZE, FRAG_CR);
         printf("enc ret %d, maxlen %d\r\n", ret, encobj.maxlen);
         frag_encobj_log(&encobj);
     }
