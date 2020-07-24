@@ -31,8 +31,8 @@ extern "C"{
     #define LORA_PREAMBLE_LENGTH                        8         // Same for Tx and Rx
     #define LORA_SYMBOL_TIMEOUT                         5         // Symbols
     #define LORA_FIX_LENGTH_PAYLOAD_ON                  false
-    #define LORA_FHSS_ENABLED                           false  
-    #define LORA_NB_SYMB_HOP                            4     
+    #define LORA_FHSS_ENABLED                           false
+    #define LORA_NB_SYMB_HOP                            4
     #define LORA_IQ_INVERSION_ON                        false
     #define LORA_CRC_ENABLED                            true
 
@@ -54,11 +54,6 @@ extern "C"{
 #define BUFFER_SIZE                                     32        // Define the payload size here
 
 #define SEC_TO_MSEC  (1000)
-#if( defined ( TARGET_KL25Z ) || defined ( TARGET_LPC11U6X ) )
-DigitalOut led( LED2 );
-#else
-DigitalOut led( LED1 );
-#endif
 
 
 /* brief::
@@ -67,18 +62,19 @@ M == The  initial  data  block  that  needs  to  be  transported  must
 N == bytes to be sent
 */
 #define FRAG_NB                 (10) // data block will be divided into 10 fragments
-#define FRAG_SIZE               (10) // each fragment size will be 10 bytes
+#define FRAG_SIZE               (19) // each fragment size will be 10 bytes
 // thus data block size is 10 * 10 == 100
-#define FRAG_CR                 (FRAG_NB + 0) // basically M/N
-#define FRAG_PER                (0.7)// changes the lost packet count
+#define FRAG_CR                 (FRAG_NB - 5) // basically M/N
+#define FRAG_PER                (0.3)// changes the lost packet count
 #define FRAG_TOLERENCE          (10 + FRAG_NB * (FRAG_PER + 0.05))
 #define LOOP_TIMES              (1)
 #define DEBUG
-#define IS_MASTER               (1)
+#define IS_MASTER               (0)
 
 #if IS_MASTER
 frag_enc_t encobj;
-uint8_t enc_buf[FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR]; // //100 + 20 * 10 + 20 * 10 == 500 bytes
+//uint8_t enc_dt[FRAG_NB * FRAG_SIZE]; // 100 bytes
+uint8_t enc_buf[FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE]; //+ FRAG_NB * FRAG_CR]; // //100 + 20 * 10 + 20 * 10 == 500 bytes
 
 #else
 frag_dec_t decobj;
@@ -176,11 +172,132 @@ void frag_encobj_log(frag_enc_t *encobj)
     }
 }
 
-int main( void ) 
-{
-    uint8_t i;
+void radioEvents(){
+
     bool isMaster = IS_MASTER;
-    uint8_t frag_tx = 0;
+    uint16_t frag_tx = 0;
+
+    while( 1 )
+    {
+        switch( State )
+        {
+        case RX:
+            //rx_count++;
+#if isMaster == 1
+            if( isMaster == true )
+            {
+                debug("Master is receiving data\r\n");
+            }
+#elif IS_MASTER == 0
+            if(!isMaster) //slave
+            {
+                if( BufferSize > 0 )
+                {
+                    debug("Data from master\r\n");
+                    dataFrag *packet = (dataFrag*) Buffer;
+                    //putbuf(Buffer, BUFFER_SIZE);
+
+                    debug("seq_num %d\r\n", packet->seqNum);
+                    if(packet->seqNum != frag_tx){
+                        debug("received giberrish(seqNum is %d, should have been %d), dropping corrupt packet\r\n",
+                                packet->seqNum, frag_tx);
+                        frag_tx++;
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        State = LOWPOWER;
+                        break;
+                    }
+                    putbuf(packet->data, FRAG_SIZE);
+
+                    frag_tx++;
+                    if(packet->seqNum == 8 || packet->seqNum == 5 /*|| packet->seqNum == 42 || packet->seqNum == 30*/
+                        ){
+                        debug("data dropped\r\n");
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        State = LOWPOWER;
+                        break;
+                    }
+
+                    int ret = frag_dec(&decobj, packet->seqNum+1, packet->data, decobj.cfg.size);
+                    if (ret == FRAG_DEC_ONGOING) {
+                        //printf("\n");
+                        debug(" decoding ongoing\r\n");
+                    } else if (ret >= 0) {
+                        printf("dec complete (reconstruct %d packets)\r\n", ret);
+                        frag_dec_log(&decobj);
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        State = LOWPOWER;
+                        break;
+                    } else {
+                        printf("dec error %d\r\n", ret);
+                        //frag_dec_log(&decobj);
+                        Radio.Rx( RX_TIMEOUT_VALUE );
+                        State = LOWPOWER;
+                        break;
+
+                    }
+                }
+            }
+#endif
+            Radio.Rx( RX_TIMEOUT_VALUE );
+            State = LOWPOWER;
+            break;
+        case TX:
+            Radio.Rx( RX_TIMEOUT_VALUE );
+            State = LOWPOWER;
+            break;
+        case RX_TIMEOUT:
+#if IS_MASTER == 1
+            if( isMaster == true )
+            {
+                if(frag_tx >= encobj.num + encobj.cr){
+                    break;
+                }
+                debug("RX_Timeout... sending data set fragments\r\n");
+                debug("sending fragment:%d: \t", frag_tx);
+
+                dataFrag Frag = {0, {0}};
+                dataFrag *packet = &Frag;
+                packet->seqNum = frag_tx;
+
+                memcpy(packet->data, encobj.line + frag_tx * FRAG_SIZE, FRAG_SIZE);
+                putbuf(encobj.line + frag_tx*FRAG_SIZE, FRAG_SIZE);
+
+                debug("sending packet with seq: %d & data : \t", packet->seqNum);
+                putbuf(packet->data, FRAG_SIZE);
+                wait_ms( 10 );
+                Radio.Send( (uint8_t*)packet, BUFFER_SIZE);
+                frag_tx++;
+            }
+#endif
+            if(!isMaster)
+            {
+                debug("Master(%d): waiting for data \r\n", isMaster);
+                Radio.Rx( RX_TIMEOUT_VALUE );
+            }
+            State = LOWPOWER;
+            break;
+        case RX_ERROR:
+            debug("RX_ERROR\r\n");
+            Radio.Rx( RX_TIMEOUT_VALUE );
+            State = LOWPOWER;
+            break;
+        case TX_TIMEOUT:
+            Radio.Rx( RX_TIMEOUT_VALUE );
+            State = LOWPOWER;
+            break;
+        case LOWPOWER:
+            wait_ms(1000);
+            break;
+        default:
+            State = LOWPOWER;
+            break;
+        }
+    }
+}
+
+int main( void )
+{
+    bool isMaster = IS_MASTER;
 
     while(1){
         debug("Press 1 to start, isMaster(%d)\r\n", isMaster);
@@ -190,16 +307,31 @@ int main( void )
         }
     }
 
-#if IS_MASTER == 1 
+    int enc_size = (FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR);
+    debug("enc size is %d\r\n", enc_size);
+    //enc_buf = (uint8_t*)malloc(enc_size*sizeof(uint8_t));
+
+#if IS_MASTER == 1
+    uint16_t i;
     if(isMaster){
         for (i = 0; i < FRAG_NB * FRAG_SIZE; i++) {
             enc_buf[i] = i;
         }
 
+
         encobj.dt = enc_buf;
-        encobj.maxlen = sizeof(enc_buf);
+        encobj.maxlen = (FRAG_NB * FRAG_SIZE + FRAG_CR * FRAG_SIZE + FRAG_NB * FRAG_CR);
+        clock_t start, end;
+        //encobj.unit = FRAG_SIZE;
+        //encobj.num = (FRAG_NB*FRAG_SIZE)/FRAG_SIZE;
+       // encobj.cr = FRAG_CR
+        //encobj.line = obj->dt;
+        //encobj.rline = obj->dt + len;
+        //encobj.mline = obj->dt + len + cr * unit;
+        start = clock();
         int ret = frag_enc(&encobj, enc_buf, FRAG_NB * FRAG_SIZE, FRAG_SIZE, FRAG_CR);
-        printf("enc ret %d, maxlen %d\r\n", ret, encobj.maxlen);
+        end = clock();
+        printf("enc ret %d, maxlen %d, duration %f\r\n", ret, encobj.maxlen, (end - start)/(double)CLOCKS_PER_SEC);
         frag_encobj_log(&encobj);
     }
 #elif IS_MASTER == 0
@@ -217,7 +349,7 @@ int main( void )
            len,
            decobj.cfg.nb,
            decobj.cfg.size,
-           decobj.cfg.tolerence);    
+           decobj.cfg.tolerence);
     }
 #endif
     debug( "\n\n\r     SX1276 Ping Pong Demo Application \n\n\r" );
@@ -240,7 +372,7 @@ int main( void )
     debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1LAS ) ), "\n\r > Board Type: SX1276MB1LAS < \n\r" );
     debug_if( ( DEBUG_MESSAGE & ( Radio.DetectBoardType( ) == SX1276MB1MAS ) ), "\n\r > Board Type: SX1276MB1MAS < \n\r" );
 
-    Radio.SetChannel( RF_FREQUENCY ); 
+    Radio.SetChannel( RF_FREQUENCY );
 
 #if USE_MODEM_LORA == 1
 
@@ -280,162 +412,9 @@ int main( void )
 
     debug_if( DEBUG_MESSAGE, "Starting Ping-Pong loop\r\n" );
 
-    led = 0;
-
     Radio.Rx( RX_TIMEOUT_VALUE );
-    
-    while( 1 )
-    {
-        switch( State )
-        {
-        case RX:
-            //rx_count++;
-#if isMaster == 1
-            if( isMaster == true )
-            {
-                if( BufferSize > 0 )
-                {
-                    if( strncmp( ( const char* )Buffer, ( const char* )PongMsg, 4 ) == 0 )
-                    {
-                        led = !led;
-                        debug( "...Pong received \r\n" );
-                        // Send the next PING frame
-                        strcpy( ( char* )Buffer, ( char* )PingMsg );
-                        // We fill the buffer with numbers for the payload
-                        for( i = 4; i < BufferSize; i++ )
-                        {
-                            Buffer[i] = i - 4;
-                        }
-                        wait_ms( 10 );
-                        Radio.Send( Buffer, BufferSize );
-                        //tx_count++;
-                    }
-                    else if( strncmp( ( const char* )Buffer, ( const char* )PingMsg, 4 ) == 0 )
-                    { // A master already exists then become a slave
-                        debug( "...Ping received\r\n" );
-                        led = !led;
-                        isMaster = false;
-                        // Send the next PONG frame
-                        strcpy( ( char* )Buffer, ( char* )PongMsg );
-                        // We fill the buffer with numbers for the payload
-                        for( i = 4; i < BufferSize; i++ )
-                        {
-                            Buffer[i] = i - 4;
-                        }
-                        wait_ms( 10 );
-                        Radio.Send( Buffer, BufferSize );
-                        //tx_count++;
-                        
-                    }
-                    else // valid reception but neither a PING or a PONG message
-                    {    // Set device as master ans start again
-                        //isMaster = true;
-                        Radio.Rx( RX_TIMEOUT_VALUE );
-                    }
-                }
-            }
-#elif IS_MASTER == 0
-            if(!isMaster) //slave
-            {
-                if( BufferSize > 0 )
-                {
-                    debug("Data from master\r\n");
-                    dataFrag *packet = (dataFrag*) Buffer;
-                    //putbuf(Buffer, BUFFER_SIZE);
-                    
-                    debug("seq_num %d\r\n", packet->seqNum);
-                    putbuf(packet->data, FRAG_SIZE);
-                    
-                    if(packet->seqNum == 8 || packet->seqNum == 5 || packet->seqNum == 4 || packet->seqNum == 3){
-                        debug("data dropped\r\n");
-                        Radio.Rx( RX_TIMEOUT_VALUE );
-                        State = LOWPOWER;
-                        break;    
-                    }
-                    
-                    int ret = frag_dec(&decobj, packet->seqNum+1, packet->data, decobj.cfg.size);
-                    if (ret == FRAG_DEC_ONGOING) {
-                        //printf("\n");
-                        debug(" decoding ongoing\r\n");
-                    } else if (ret >= 0) {
-                        printf("dec complete (reconstruct %d packets)\r\n", ret);
-                        frag_dec_log(&decobj);
-                        break;
-                    } else {
-                        printf("dec error %d\r\n", ret);
-                        frag_dec_log(&decobj);
-                        break;
-                    }
-                }
-            }
-#endif      
-            Radio.Rx( RX_TIMEOUT_VALUE );
-            State = LOWPOWER;
-            break;
-        case TX:
-            led = !led;
-            if( isMaster == true )  
-            {
-                //debug( "Ping...\r\n" );
-            }
-            else
-            {
-                //debug( "Pong...\r\n" );
-            }
-            Radio.Rx( RX_TIMEOUT_VALUE );
-            State = LOWPOWER;
-            break;
-        case RX_TIMEOUT:
-#if IS_MASTER == 1
-            if( isMaster == true )
-            {
-                if(frag_tx >= encobj.num + encobj.cr){
-                    break;    
-                }
-                debug("RX_Timeout... sending data set fragments\r\n");
-                debug("sending fragment:%d: \t", frag_tx);
-                
-                dataFrag Frag = {0, {0}, {0}};
-                dataFrag *packet = &Frag;//(dataFrag*)malloc(sizeof(dataFrag));
-                packet->seqNum = frag_tx;
-                memcpy(packet->data, encobj.line + frag_tx * FRAG_SIZE, FRAG_SIZE);
-                putbuf(encobj.line + frag_tx*FRAG_SIZE, FRAG_SIZE);
-                //memcpy(Buffer, packet, sizeof(packet));
-                /*for( i = FRAG_SIZE; i < BufferSize; i++ )
-                {
-                    Buffer[i] = '\0';
-                }*/
-                debug("sending packet with seq: %d & data : \t", packet->seqNum);
-                putbuf(packet->data, FRAG_SIZE);
-                wait_ms( 10 );
-                Radio.Send( (uint8_t*)packet, BUFFER_SIZE);
-                frag_tx++;
-                //tx_count++;
-            }
-#endif
-            if(!isMaster)
-            {
-                debug("Master(%d): waiting for data \r\n", isMaster);
-                Radio.Rx( RX_TIMEOUT_VALUE );
-            }
-            State = LOWPOWER;
-            break;
-        case RX_ERROR:
-            debug("RX_ERROR\r\n");
-            State = LOWPOWER;
-            break;
-        case TX_TIMEOUT:
-            Radio.Rx( RX_TIMEOUT_VALUE );
-            State = LOWPOWER;
-            break;
-        case LOWPOWER:
-            wait_ms(1000);
-            break;
-        default:
-            State = LOWPOWER;
-            break;
-        }
-    }
+
+    radioEvents();
 }
 
 void OnTxDone( void )

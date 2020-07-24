@@ -2,7 +2,7 @@
 
 #define FRAGDBG(x...)       printf(x)
 #define FRAGLOG(x...)       printf(x)
-#define DEBUG
+//#define DEBUG
 
 #define FRAG_COMPRESS_MATRIX_SIZE
 
@@ -114,10 +114,10 @@ int frag_enc(frag_enc_t *obj, uint8_t *buf, int len, int unit, int cr)
     }
 
     num = len / unit;
-    printf("num is %d, unit is %d, len is %d\n", num, unit, len);
-    maxlen = len + cr * unit + num * cr;
+    printf("num is %d, unit is %d, len is %d, cr is %d\r\n", num, unit, len, cr);
+    maxlen = len + cr * unit; //+ num * cr;
     if (maxlen > obj->maxlen) {
-        FRAGLOG("maxlen: %d, input buffer: %d", maxlen, obj->maxlen);
+        FRAGLOG("maxlen: %d, input buffer: %d\r\n", maxlen, obj->maxlen);
         return -2;
     }
 
@@ -128,12 +128,15 @@ int frag_enc(frag_enc_t *obj, uint8_t *buf, int len, int unit, int cr)
     obj->rline = obj->dt + len;
     obj->mline = obj->dt + len + cr * unit;
 
-    memcpy(obj->dt + 0, buf, len);
-    mline = obj->mline;
+    //memcpy(obj->dt + 0, buf, len);
+    mline = malloc(sizeof(uint8_t) * num);
+    //mline = obj->mline;
     rline = obj->rline;
-    memset(rline, 0,cr*unit); // should use memset?
-    for (i = 0; i < cr; i++, mline += num, rline += unit) {
+    memset(rline, 0,cr*unit);
+
+    for (i = 0; i < cr; i++, rline += unit) {
         // generate matrix line i+1 for matrix size num x num
+        //memset(mline, 0, num);
         matrix_line(mline, i + 1, num);
         for (j = 0; j < num; j++) {
         // perform a bitwise Xor operation between all the uncoded fragments corresponding to 1
